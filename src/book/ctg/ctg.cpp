@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -9,6 +10,8 @@
 
 #include "book/ctg/ctg.h"
 #include "book/file_mapping.h"
+#include "misc.h"
+#include "movegen.h"
 #include "position.h"
 #include "uci.h"
 
@@ -211,308 +214,7 @@ namespace Stockfish
     {
         static std::default_random_engine randomEngine = std::default_random_engine(now());
 
-        enum class CtgMoveAnnotation
-        {
-            None = 0x00,
-            GoodMove = 0x01, //!
-            BadMove = 0x02, //?
-            ExcellentMove = 0x03, //!!
-            LosingMove = 0x04, //??
-            InterestingMove = 0x05, //!?
-            DubiousMove = 0x06, //?!
-            OnlyMove = 0x08,
-            Zugzwang = 0x16,
-            Unknown = 0xFF,
-        };
 
-        enum class CtgMoveRecommendation
-        {
-            NoPreference = 0x00,
-            RedMove = 0x40,
-            GreenMove = 0x80,
-            Unknown = 0xFF,
-        };
-
-        enum class CtgMoveCommentary
-        {
-            None = 0x00,
-            Equal = 0x0B, //=
-            Unclear = 0x0D,
-            EqualPlus = 0x0E, //=+
-            PlusEqual = 0x0F, //+=
-            MinusSlashPlus = 0x10, //-/+
-            PlusSlashMinus = 0x11, //+/-
-            PlusMinus = 0x13, //+-
-            DevelopmentAdvantage = 0x20,
-            Initiative = 0x24,
-            WithAttack = 0x28,
-            Compensation = 0x2C,
-            Counterplay = 0x84,
-            Zeitnot = 0x8A,
-            Novelty = 0x92,
-            Unknown = 0xFF,
-        };
-
-        struct CtgMoveStats
-        {
-            int32_t win;
-            int32_t loss;
-            int32_t draw;
-
-            int32_t ratingDiv;
-            int32_t ratingSum;
-
-            CtgMoveStats()
-            {
-                win = 0;
-                loss = 0;
-                draw = 0;
-
-                ratingDiv = 0;
-                ratingSum = 0;
-            }
-        };
-
-        struct CtgMove : CtgMoveStats
-        {
-        private:
-            Move      pseudoMove;
-            Move      sfMove;
-
-        public:
-            CtgMoveAnnotation     annotation;
-            CtgMoveRecommendation recommendation;
-            CtgMoveCommentary     commentary;
-
-            int64_t				  moveWeight;
-
-            CtgMove() : CtgMoveStats()
-            {
-                pseudoMove = Move::none();
-                sfMove = Move::none();
-
-                annotation = CtgMoveAnnotation::Unknown;
-                recommendation = CtgMoveRecommendation::Unknown;
-                commentary = CtgMoveCommentary::Unknown;
-
-                moveWeight = std::numeric_limits<int64_t>::min();
-            }
-
-            void set_from_to(const Position& pos, Square from, Square to)
-            {
-                PieceType promotionPiece = NO_PIECE_TYPE;
-
-                //Special handling of castling moves : SF encodes castling as KxR, while CTG encodes it as King moving in the direction of the rook by two steps
-                //Special handling of promotion moves: This CTG implementation does not support underpromotion
-                if (from == SQ_E1 && to == SQ_G1 && pos.piece_on(from) == W_KING && pos.piece_on(SQ_H1) == W_ROOK && pos.can_castle(WHITE_OO))
-                    to = SQ_H1;
-                else if (from == SQ_E8 && to == SQ_G8 && pos.piece_on(from) == B_KING && pos.piece_on(SQ_H8) == B_ROOK && pos.can_castle(BLACK_OO))
-                    to = SQ_H8;
-                else if (from == SQ_E1 && to == SQ_C1 && pos.piece_on(from) == W_KING && pos.piece_on(SQ_A1) == W_ROOK && pos.can_castle(WHITE_OOO))
-                    to = SQ_A1;
-                else if (from == SQ_E8 && to == SQ_C8 && pos.piece_on(from) == B_KING && pos.piece_on(SQ_A8) == B_ROOK && pos.can_castle(BLACK_OOO))
-                    to = SQ_A8;
-                else if (((rank_of(from) == RANK_7 && rank_of(to) == RANK_8) || (rank_of(from) == RANK_2 && rank_of(to) == RANK_1)) && type_of(pos.piece_on(from)) == PAWN)
-                    promotionPiece = QUEEN;
-
-                pseudoMove = promotionPiece == NO_PIECE_TYPE ? Move(from, to) : Move::make<PROMOTION>(from, to, promotionPiece);
-            }
-
-            Move pseudo_move() const
-            {
-                assert(pseudoMove != Move::none());
-                return pseudoMove;
-            }
-
-            Move set_sf_move(Move m)
-            {
-                return sfMove = m;
-            }
-
-            Move sf_move() const
-            {
-                assert(sfMove != Move::none());
-                return sfMove;
-            }
-
-            int64_t weight() const
-            {
-                assert(moveWeight != std::numeric_limits<int64_t>::min());
-                return moveWeight;
-            }
-
-            bool green() const
-            {
-                return    (int(recommendation) & int(CtgMoveRecommendation::GreenMove))
-                    && annotation != CtgMoveAnnotation::BadMove
-                    && annotation != CtgMoveAnnotation::LosingMove
-                    && annotation != CtgMoveAnnotation::InterestingMove
-                    && annotation != CtgMoveAnnotation::DubiousMove;
-            }
-
-            bool red() const
-            {
-                return (int(recommendation) & int(CtgMoveRecommendation::RedMove));
-            }
-        };
-
-        struct CtgMoveList : public std::vector<CtgMove>
-        {
-            CtgMoveStats    positionStats;
-
-            void calculate_weights()
-            {
-                if (size() == 0)
-                    return;
-
-                auto calculate_pseudo_weight = [](CtgMove& m, int win, int loss, int draw) -> int64_t
-                    {
-                        static constexpr int64_t MAX_WEIGHT = std::numeric_limits<int16_t>::max();
-                        static constexpr int64_t MIN_WEIGHT = std::numeric_limits<int16_t>::min();
-
-                        int64_t winFactor = 2;
-                        int64_t lossFactor = 2;
-                        constexpr int64_t drawFactor = 1;
-
-                        //Recommendation
-                        winFactor += m.green() ? 10 : 0;
-                        lossFactor += m.red() ? 10 : 0;
-
-                        //Annotation
-                        switch (m.annotation)
-                        {
-                        case CtgMoveAnnotation::GoodMove:
-                            winFactor += m.green() ? 5 : 0;
-                            break;
-
-                        case CtgMoveAnnotation::BadMove:
-                            lossFactor += 5;
-                            break;
-
-                        case CtgMoveAnnotation::ExcellentMove:
-                            winFactor += m.green() ? 10 : 0;
-                            break;
-
-                        case CtgMoveAnnotation::LosingMove:
-                            lossFactor += 10;
-                            break;
-
-                        case CtgMoveAnnotation::InterestingMove:
-                            winFactor += 2;
-                            break;
-
-                        case CtgMoveAnnotation::DubiousMove:
-                            lossFactor += 2;
-                            break;
-
-                        case CtgMoveAnnotation::Zugzwang:
-                            winFactor += 1;
-                            lossFactor += 1;
-                            break;
-
-                        case CtgMoveAnnotation::OnlyMove:
-                            winFactor += m.green() ? MAX_WEIGHT : 0;
-                            break;
-
-                        default: //Just to avoid GCC warning: enumeration value 'XXX' not handled in switch
-                            break;
-                        }
-
-                        if (winFactor == MAX_WEIGHT)
-                            return MAX_WEIGHT;
-
-                        if (lossFactor == MAX_WEIGHT)
-                            return MIN_WEIGHT;
-
-                        return ((win + 100) * winFactor - (loss + 100) * lossFactor + (draw + 100) * drawFactor);
-                    };
-
-                //Calculate average number of games
-                int64_t avgGames = 0;
-                for (const CtgMove& m : *this)
-                    avgGames += m.win + m.loss + m.draw;
-
-                avgGames /= size();
-                if (avgGames == 0)
-                    avgGames = 300;
-
-                //Calculate weight assuming all moves have played the
-                // calculated average number of games, by adding (or removing)
-                // an equal number of won, lost, and drawn games to each move
-                //Also calculate minimum and maximum for normalization later
-                int64_t maxWeight = std::numeric_limits<int64_t>::min();
-                int64_t minWeight = std::numeric_limits<int64_t>::max();
-                for (CtgMove& m : *this)
-                {
-                    int64_t games = m.win + m.loss + m.draw;
-                    int64_t diff = (avgGames - games) / 3;
-
-                    int64_t win = std::max<int64_t>(m.win + diff, 0);
-                    int64_t loss = std::max<int64_t>(m.loss + diff, 0);
-                    int64_t draw = std::max<int64_t>(m.draw + diff, 0);
-
-                    assert(win + draw + loss >= 0);
-                    if (win + loss + draw == 0)
-                        m.moveWeight = 0;
-                    else
-                        m.moveWeight = calculate_pseudo_weight(m, win, loss, draw);
-
-                    if (m.moveWeight < minWeight)
-                        minWeight = m.moveWeight;
-
-                    if (m.moveWeight > maxWeight)
-                        maxWeight = m.moveWeight;
-                }
-
-                //Normalize to [-100, +100]
-                for (CtgMove& m : *this)
-                {
-                    if (maxWeight == minWeight)
-                    {
-                        m.moveWeight = 0;
-                        continue;
-                    }
-
-                    m.moveWeight = (m.moveWeight - minWeight) * 200 / (maxWeight - minWeight) - 100;
-                }
-
-                //Sort
-                stable_sort(begin(), end(), [](const CtgMove& mv1, const CtgMove& mv2) { return mv1.weight() > mv2.weight(); });
-            }
-        };
-
-        struct CtgPositionData
-        {
-            Square           epSquare;
-            bool             invert;
-            bool             flip;
-            char             board[64];
-
-            unsigned char    encodedPosition[32];
-            int32_t          encodedPosLen;
-            int32_t          encodedBitsLeft;
-
-            unsigned char    positionPage[256];
-
-        public:
-            CtgPositionData()
-            {
-                epSquare = SQ_NONE;
-                invert = false;
-                flip = false;
-
-                memset(board, 0, sizeof(board));
-                memset(encodedPosition, 0, sizeof(encodedPosition));
-
-                encodedPosLen = 0;
-                encodedBitsLeft = 0;
-
-                memset(positionPage, 0, sizeof(positionPage));
-            }
-
-            CtgPositionData(const CtgPositionData&) = delete;
-            CtgPositionData& operator =(const CtgPositionData&) = delete;
-        };
     }
 
     namespace Book::CTG
@@ -1006,7 +708,7 @@ namespace Stockfish
         void CtgBook::get_moves(const Position& pos, const CtgPositionData& positionData, CtgMoveList& ctgMoveList) const
         {
             //Get legal moves for cross checking later
-            MoveList legalMoves = MoveList<LEGAL>(pos);
+            MoveList<LEGAL> legalMoves(pos);
 
             //Position object to be used to play the moves
             StateInfo si[2];
@@ -1101,7 +803,7 @@ namespace Stockfish
 
             auto ctbFile = base;
             ctbFile.replace_extension(".ctb");
-            Book::FileMapping ctb;
+            ::Stockfish::Book::FileMapping ctb;
             if (!ctb.map(ctbFile.u8string(), true))
             {
                 close();
@@ -1155,7 +857,7 @@ namespace Stockfish
 
             //Remove red moves and any moves with negative weight
             ctgMoveList.erase(
-                remove_if(
+                std::remove_if(
                     ctgMoveList.begin(),
                     ctgMoveList.end(),
                     [&](const CtgMove& x)
@@ -1169,7 +871,7 @@ namespace Stockfish
                 return Move::none();
 
             //Sort moves accorging to their weights
-            stable_sort(ctgMoveList.begin(), ctgMoveList.end(), [](const CtgMove& mv1, const CtgMove& mv2) { return mv1.weight() > mv2.weight(); });
+            std::stable_sort(ctgMoveList.begin(), ctgMoveList.end(), [](const CtgMove& mv1, const CtgMove& mv2) { return mv1.weight() > mv2.weight(); });
 
             //Only keep the top 'width' moves in the list
             while (ctgMoveList.size() > width)
@@ -1220,7 +922,7 @@ namespace Stockfish
                         for (const CtgMove& m : ctgMoveList)
                         {
                             ss
-                                << std::setw(10) << std::left << UCI::move(m.sf_move(), pos.is_chess960())
+                                << std::setw(10) << std::left << UCIEngine::move(m.sf_move(), pos.is_chess960())
                                 << std::setw(10) << std::left << m.win
                                 << std::setw(10) << std::left << m.draw
                                 << std::setw(10) << std::left << m.loss
@@ -1235,6 +937,4 @@ namespace Stockfish
             std::cout << ss.str() << std::endl;
         }
     }
-}
-
 }  // namespace Stockfish

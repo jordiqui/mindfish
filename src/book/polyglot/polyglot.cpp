@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -6,8 +7,10 @@
 #include <random>
 #include <sstream>
 
+#include "misc.h"
 #include "book/file_mapping.h"
 #include "book/polyglot/polyglot.h"
+#include "movegen.h"
 #include "position.h"
 #include "uci.h"
 
@@ -15,16 +18,12 @@ namespace Stockfish
 {
     namespace
     {
+        using ::Stockfish::Book::Polyglot::PolyglotBookMove;
+        using ::Stockfish::Book::Polyglot::PolyglotEntry;
+
         // A Polyglot book is a series of "entries" of 16 bytes. All integers are
         // stored in big-endian format, with the highest byte first (regardless of
         // size). The entries are ordered according to the key in ascending order.
-        struct PolyglotEntry {
-            uint64_t key;
-            uint16_t move;
-            uint16_t count;
-            int32_t  learn;
-        };
-
         // Random numbers from Polyglot, used to compute book hash keys
         const union {
             Key PolyglotRandoms[781];
@@ -358,15 +357,6 @@ namespace Stockfish
             e.learn = Book::BookUtil::read_big_endian<int32_t >(buffer, pos, bufferLen);
         }
 
-        struct PolyglotBookMove
-        {
-            Move move;
-            PolyglotEntry entry;
-
-            PolyglotBookMove() { move = Move::none(); memset(&entry, 0, sizeof(PolyglotEntry)); }
-            PolyglotBookMove(const PolyglotEntry& e, Move m) { memcpy(&entry, &e, sizeof(PolyglotEntry)); move = m; }
-        };
-
         auto randomEngine = std::default_random_engine(now());
     }
 
@@ -459,7 +449,7 @@ namespace Stockfish
             }
         }
 
-        PolyglotBook::PolyglotBook() : filename(), bookData(nullptr), bookDataLength(0)
+        PolyglotBook::PolyglotBook() : Book(), filename(), bookData(nullptr), bookDataLength(0)
         {
         }
 
@@ -495,7 +485,7 @@ namespace Stockfish
 
             close();
 
-            Book::FileMapping fm;
+            ::Stockfish::Book::FileMapping fm;
             if (!fm.map(f, false))
             {
                 sync_cout << "info string Could not open book file: " << f << sync_endl;
@@ -605,7 +595,7 @@ namespace Stockfish
                     {
                         ss
                             << std::setw(2) << std::setfill(' ') << std::left << (i + 1) << ": "
-                            << std::setw(5) << std::setfill(' ') << std::left << UCI::move(bookMoves[i].move, pos.is_chess960())
+                            << std::setw(5) << std::setfill(' ') << std::left << ::Stockfish::UCIEngine::move(bookMoves[i].move, pos.is_chess960())
                             << ", count: " << std::setw(4) << std::setfill(' ') << std::left << bookMoves[i].entry.count
                             << std::endl;
                     }
@@ -615,6 +605,4 @@ namespace Stockfish
             std::cout << ss.str() << std::endl;
         }
     }
-}
-
 }  // namespace Stockfish

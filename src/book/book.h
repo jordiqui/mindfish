@@ -17,11 +17,10 @@ class BookManager;
 namespace Book {
 
 namespace Detail {
-    inline constexpr union {
-        std::uint32_t i;
-        char          c[4];
-    } Le = {0x01020304};
-    inline constexpr bool IsBigEndian = (Le.c[0] == 1);
+    inline bool IsBigEndian() {
+        const std::uint32_t value = 0x01020304u;
+        return reinterpret_cast<const unsigned char*>(&value)[0] == 0x01;
+    }
 }
 
 class BookUtil {
@@ -39,7 +38,7 @@ class BookUtil {
 
         std::memcpy(&result, buffer + offset, typeSize);
 
-        if (!Detail::IsBigEndian)
+        if (!Detail::IsBigEndian())
         {
             unsigned char                                          u[typeSize];
             typename std::make_unsigned<IntType>::type             v = 0;
@@ -66,9 +65,10 @@ class Book {
     friend class ::Stockfish::BookManager;
 
    private:
-    static Book* create_book(const std::string& filename);
+   static Book* create_book(const std::string& filename);
 
    public:
+    Book()                    = default;
     virtual ~Book() = default;
 
     Book(const Book&)            = delete;
