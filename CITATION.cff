@@ -2,17 +2,20 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: Stockfish
+title: Pullfish
 message: >-
-  Please cite this software using the metadata from this
-  file.
+  Please cite Pullfish 17.1 as a derivative of Stockfish 17.1 using the metadata
+  from this file.
 type: software
 authors:
+  - family-names: Ruiz
+    given-names: Jorge
+  - name: ChatGPT
   - name: The Stockfish developers (see AUTHORS file)
-repository-code: 'https://github.com/official-stockfish/Stockfish'
-url: 'https://stockfishchess.org/'
-repository-artifact: 'https://stockfishchess.org/download/'
-abstract: Stockfish is a free and strong UCI chess engine.
+repository-code: 'https://github.com/jorgeruiz/pullfish'
+url: 'https://github.com/jorgeruiz/pullfish'
+repository-artifact: 'https://github.com/jorgeruiz/pullfish/releases'
+abstract: Pullfish is a free and strong UCI chess engine derived from Stockfish 17.1.
 keywords:
   - chess
   - artificial intelligence (AI)
