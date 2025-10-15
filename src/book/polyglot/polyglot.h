@@ -2,6 +2,7 @@
 #define POLYGLOT_BOOK_H_INCLUDED
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -9,8 +10,20 @@
 
 namespace Stockfish::Book::Polyglot {
 
-struct PolyglotEntry;
-struct PolyglotBookMove;
+struct PolyglotEntry {
+    Key      key   = 0;
+    uint16_t move  = 0;
+    uint16_t count = 0;
+    int32_t  learn = 0;
+};
+
+struct PolyglotBookMove {
+    Move          move  = Move::none();
+    PolyglotEntry entry{};
+
+    PolyglotBookMove() = default;
+    PolyglotBookMove(const PolyglotEntry& e, Move m) : move(m), entry(e) {}
+};
 
 class PolyglotBook: public Book {
    public:

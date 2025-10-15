@@ -16,6 +16,7 @@
 #endif
 
 #include <cassert>
+#include <iostream>
 
 namespace Stockfish::Book {
 

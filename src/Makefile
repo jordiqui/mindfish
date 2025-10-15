@@ -72,7 +72,7 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features
+VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -426,8 +426,8 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
-CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
-DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
+CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 -I. $(EXTRACXXFLAGS)
+DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17 -I.
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
 ifeq ($(COMP),)
