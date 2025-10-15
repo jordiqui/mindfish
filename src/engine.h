@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "book/book_manager.h"
 #include "nnue/network.h"
 #include "numa.h"
 #include "position.h"
@@ -119,6 +120,7 @@ class Engine {
     ThreadPool                               threads;
     TranspositionTable                       tt;
     LazyNumaReplicated<Eval::NNUE::Networks> networks;
+    BookManager                              bookManager;
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;
