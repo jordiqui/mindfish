@@ -104,6 +104,10 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Move Overhead", Option(10, 0, 5000));
 
+    options.add("Minimum Thinking Time", Option(100, 0, 5000));
+
+    options.add("Slow Mover", Option(100, 10, 1000));
+
     options.add("nodestime", Option(0, 0, 10000));
 
     options.add("UCI_Chess960", Option(false));
@@ -140,8 +144,32 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
+    options.add(
+      "CTG/BIN Book 1 File",
+      Option("", [this](const Option&) {
+          bookManager.init(0, options);
+          return std::nullopt;
+      }));
+    options.add("Book 1 Width", Option(1, 1, 100));
+    options.add("Book 1 Depth", Option(100, 0, 200));
+    options.add("(CTG) Book 1 Only Green", Option(false));
+
+    options.add(
+      "CTG/BIN Book 2 File",
+      Option("", [this](const Option&) {
+          bookManager.init(1, options);
+          return std::nullopt;
+      }));
+    options.add("Book 2 Width", Option(1, 1, 100));
+    options.add("Book 2 Depth", Option(100, 0, 200));
+    options.add("(CTG) Book 2 Only Green", Option(false));
+
     load_networks();
     resize_threads();
+
+    const auto baseDir = !binaryDirectory.empty() ? binaryDirectory : CommandLine::get_working_directory();
+    bookManager.set_base_directory(baseDir);
+    bookManager.init(options);
 }
 
 std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
@@ -153,6 +181,37 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_networks();
+
+    if (!limits.ponderMode && !limits.infinite && limits.perft == 0 && limits.mate == 0 && limits.nodes == 0
+        && limits.depth == 0)
+    {
+        auto bookMove = bookManager.probe(pos, options);
+
+        if (bookMove != Move::none())
+        {
+            bool allowed = true;
+
+            if (!limits.searchmoves.empty())
+            {
+                allowed = false;
+                for (const auto& token : limits.searchmoves)
+                {
+                    if (UCIEngine::to_move(pos, token) == bookMove)
+                    {
+                        allowed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (allowed)
+            {
+                const auto best = UCIEngine::move(bookMove, pos.is_chess960());
+                updateContext.onBestmove(best, "");
+                return;
+            }
+        }
+    }
 
     threads.start_thinking(options, pos, states, limits);
 }
