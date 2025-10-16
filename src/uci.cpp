@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <iterator>
 #include <optional>
 #include <sstream>
@@ -38,6 +39,8 @@
 #include "search.h"
 #include "types.h"
 #include "ucioption.h"
+#include "learn/learn.h"
+#include "wdl/win_probability.h"
 
 namespace Stockfish {
 
@@ -66,13 +69,16 @@ void UCIEngine::print_info_string(std::string_view str) {
 
 UCIEngine::UCIEngine(int argc, char** argv) :
     engine(argv[0]),
-    cli(argc, argv) {
+    cli(argc, argv),
+    pos(),
+    states(new std::deque<StateInfo>(1)) {
 
     engine.get_options().add_info_listener([](const std::optional<std::string>& str) {
         if (str.has_value())
             print_info_string(*str);
     });
 
+    pos.set(StartFEN, false, &states->back());
     init_search_update_listeners();
 }
 
@@ -103,7 +109,20 @@ void UCIEngine::loop() {
         is >> std::skipws >> token;
 
         if (token == "quit" || token == "stop")
+        {
             engine.stop();
+
+            if (token == "quit" && LD.is_enabled() && !LD.is_paused())
+            {
+                engine.wait_for_search_finished();
+
+                if (LD.learning_mode() == LearningMode::Self)
+                    putQLearningTrajectoryIntoLearningTable();
+
+                if (!LD.is_readonly())
+                    LD.persist(engine.get_options());
+            }
+        }
 
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
         // So, 'ponderhit' is sent if pondering was done on the same move that the user
@@ -130,9 +149,27 @@ void UCIEngine::loop() {
             go(is);
         }
         else if (token == "position")
+        {
             position(is);
+        }
         else if (token == "ucinewgame")
+        {
+            if (LD.is_enabled())
+            {
+                if (LD.learning_mode() == LearningMode::Self)
+                    putQLearningTrajectoryIntoLearningTable();
+
+                if (!LD.is_readonly())
+                    LD.persist(engine.get_options());
+
+                setStartPoint();
+            }
+
             engine.search_clear();
+
+            states = StateListPtr(new std::deque<StateInfo>(1));
+            pos.set(StartFEN, engine.get_options()["UCI_Chess960"], &states->back());
+        }
         else if (token == "isready")
             sync_cout << "readyok" << sync_endl;
 
@@ -148,6 +185,10 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "showexp")
+            LD.show_exp(pos);
+        else if (token == "quickresetexp")
+            LD.quick_reset_exp();
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
@@ -496,42 +537,20 @@ void UCIEngine::position(std::istringstream& is) {
     }
 
     engine.set_position(fen, moves);
-}
 
-namespace {
+    states = StateListPtr(new std::deque<StateInfo>(1));
+    pos.set(fen, engine.get_options()["UCI_Chess960"], &states->back());
 
-struct WinRateParams {
-    double a;
-    double b;
-};
+    for (const auto& move : moves)
+    {
+        auto m = UCIEngine::to_move(pos, move);
 
-WinRateParams win_rate_params(const Position& pos) {
+        if (m == Move::none())
+            break;
 
-    int material = pos.count<PAWN>() + 3 * pos.count<KNIGHT>() + 3 * pos.count<BISHOP>()
-                 + 5 * pos.count<ROOK>() + 9 * pos.count<QUEEN>();
-
-    // The fitted model only uses data for material counts in [17, 78], and is anchored at count 58.
-    double m = std::clamp(material, 17, 78) / 58.0;
-
-    // Return a = p_a(material) and b = p_b(material), see github.com/official-stockfish/WDL_model
-    constexpr double as[] = {-13.50030198, 40.92780883, -36.82753545, 386.83004070};
-    constexpr double bs[] = {96.53354896, -165.79058388, 90.89679019, 49.29561889};
-
-    double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
-    double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
-
-    return {a, b};
-}
-
-// The win rate model is 1 / (1 + exp((a - eval) / b)), where a = p_a(material) and b = p_b(material).
-// It fits the LTC fishtest statistics rather accurately.
-int win_rate_model(Value v, const Position& pos) {
-
-    auto [a, b] = win_rate_params(pos);
-
-    // Return the win rate in per mille units, rounded to the nearest integer.
-    return int(0.5 + 1000 / (1 + std::exp((a - double(v)) / b)));
-}
+        states->emplace_back();
+        pos.do_move(m, states->back());
+    }
 }
 
 std::string UCIEngine::format_score(const Score& s) {
@@ -560,7 +579,7 @@ int UCIEngine::to_cp(Value v, const Position& pos) {
     // (log(1/L - 1) - log(1/W - 1)) / (log(1/L - 1) + log(1/W - 1)).
     // Based on our win_rate_model, this simply yields v / a.
 
-    auto [a, b] = win_rate_params(pos);
+    auto [a, b] = WDLModel::win_rate_params(pos);
 
     return std::round(100 * int(v) / a);
 }
@@ -568,8 +587,8 @@ int UCIEngine::to_cp(Value v, const Position& pos) {
 std::string UCIEngine::wdl(Value v, const Position& pos) {
     std::stringstream ss;
 
-    int wdl_w = win_rate_model(v, pos);
-    int wdl_l = win_rate_model(-v, pos);
+    int wdl_w = WDLModel::win_rate_model(v, pos);
+    int wdl_l = WDLModel::win_rate_model(-v, pos);
     int wdl_d = 1000 - wdl_w - wdl_l;
     ss << wdl_w << " " << wdl_d << " " << wdl_l;
 

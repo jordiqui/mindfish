@@ -30,6 +30,9 @@
 
 namespace Stockfish {
 
+void setStartPoint();
+void putQLearningTrajectoryIntoLearningTable();
+
 class TranspositionTable;
 
 // StateInfo struct stores information needed to restore a Position object to

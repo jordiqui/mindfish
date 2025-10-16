@@ -33,6 +33,7 @@
 #include <ratio>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "evaluate.h"
 #include "history.h"
@@ -48,10 +49,35 @@
 #include "tt.h"
 #include "uci.h"
 #include "ucioption.h"
+#include "learn/learn.h"
+#include "wdl/win_probability.h"
 
 namespace Stockfish {
 
 namespace TB = Tablebases;
+
+namespace {
+
+constexpr Value DecidedGameEvalThreshold = PawnValue * 5;
+constexpr int   DecidedGameMaxPly        = 150;
+constexpr int   DecidedGameMaxPieceCount = 5;
+
+inline bool is_game_decided(const Position& pos, Value lastScore) {
+    if (is_valid(lastScore) && std::abs(lastScore) > DecidedGameEvalThreshold)
+        return true;
+
+    if (pos.game_ply() > DecidedGameMaxPly)
+        return true;
+
+    if (pos.count<ALL_PIECES>() < DecidedGameMaxPieceCount)
+        return true;
+
+    return false;
+}
+
+thread_local std::vector<QLearningMove> qLearningTrajectory;
+
+}  // namespace
 
 void syzygy_extend_pv(const OptionsMap&            options,
                       const Search::LimitsType&    limits,
@@ -250,6 +276,38 @@ void Search::Worker::start_searching() {
         && rootMoves[0].pv[0] != Move::none())
         bestThread = threads.get_best_thread()->worker.get();
 
+    if (bestThread->rootMoves[0].pv[0] != Move::none())
+    {
+        const bool shouldLearn = LD.is_enabled() && !LD.is_paused()
+                                 && (rootPos.game_ply() == 0 || rootPos.count<ALL_PIECES>() <= 8);
+
+        if (shouldLearn && bestThread->completedDepth > Depth(4))
+        {
+            PersistedLearningMove plm;
+            plm.key                = rootPos.key();
+            plm.learningMove.depth = bestThread->completedDepth;
+            plm.learningMove.move  = bestThread->rootMoves[0].pv[0];
+            plm.learningMove.score = bestThread->rootMoves[0].score;
+            plm.learningMove.performance = WDLModel::get_win_probability(plm.learningMove.score, rootPos);
+
+            if (LD.learning_mode() == LearningMode::Self)
+            {
+                if (const LearningMove* existing = LD.probe_move(plm.key, plm.learningMove.move))
+                    plm.learningMove.score = existing->score;
+
+                QLearningMove qMove;
+                qMove.persistedLearningMove = plm;
+                const int material = rootPos.count<PAWN>() + 3 * rootPos.count<KNIGHT>()
+                                     + 3 * rootPos.count<BISHOP>() + 5 * rootPos.count<ROOK>()
+                                     + 9 * rootPos.count<QUEEN>();
+                qMove.materialClamp = std::clamp(material, 17, 78);
+                qLearningTrajectory.push_back(qMove);
+            }
+            else
+                LD.add_new_learning(plm.key, plm.learningMove);
+        }
+    }
+
     main_manager()->bestPreviousScore        = bestThread->rootMoves[0].score;
     main_manager()->bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
 
@@ -265,6 +323,18 @@ void Search::Worker::start_searching() {
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
+
+    if (LD.is_enabled() && !LD.is_paused()
+        && is_game_decided(rootPos, bestThread->rootMoves[0].score))
+    {
+        if (LD.learning_mode() == LearningMode::Self)
+            putQLearningTrajectoryIntoLearningTable();
+
+        if (!LD.is_readonly())
+            LD.persist(options);
+
+        LD.pause();
+    }
 }
 
 // Main iterative deepening loop. It calls search()
@@ -2216,5 +2286,35 @@ bool RootMove::extract_ponder_from_tt(const TranspositionTable& tt, Position& po
     return pv.size() > 1;
 }
 
+
+void putQLearningTrajectoryIntoLearningTable() {
+    constexpr double learning_rate = 0.5;
+    constexpr double gamma         = 0.99;
+
+    if (qLearningTrajectory.size() <= 1)
+        return;
+
+    for (std::size_t index = qLearningTrajectory.size() - 1; index > 0; --index)
+    {
+        LearningMove prev = qLearningTrajectory[index - 1].persistedLearningMove.learningMove;
+        const LearningMove current = qLearningTrajectory[index].persistedLearningMove.learningMove;
+
+        const double updatedScore = prev.score * (1.0 - learning_rate)
+                                    + learning_rate * (gamma * current.score);
+        prev.score = Value(std::lround(updatedScore));
+
+        prev.performance = WDLModel::get_win_probability_by_material(
+          prev.score, qLearningTrajectory[index - 1].materialClamp);
+
+        LD.add_new_learning(qLearningTrajectory[index - 1].persistedLearningMove.key, prev);
+    }
+
+    qLearningTrajectory.clear();
+}
+
+void setStartPoint() {
+    LD.resume();
+    qLearningTrajectory.clear();
+}
 
 }  // namespace Stockfish

@@ -55,8 +55,10 @@ class UCIEngine {
     auto& engine_options() { return engine.get_options(); }
 
    private:
-    Engine      engine;
-    CommandLine cli;
+    Engine       engine;
+    CommandLine  cli;
+    Position     pos;
+    StateListPtr states;
 
     static void print_info_string(std::string_view str);
 
