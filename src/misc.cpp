@@ -40,8 +40,8 @@ namespace Stockfish {
 namespace {
 
 // Version number or dev.
-constexpr std::string_view engine_name = "Pullfish";
-constexpr std::string_view version     = "17.1";
+constexpr std::string_view engine_name = "Pullfish 1.0";
+constexpr std::string_view version     = "171025";
 constexpr std::string_view upstream_version = "Stockfish 17.1";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
@@ -162,7 +162,7 @@ std::string engine_version_info() {
 
 std::string engine_info(bool to_uci) {
     return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "Jorge Ruiz with credits to ChatGPT and the Stockfish developers (see AUTHORS file)";
+         + "Jorge Ruiz with credits to ChatGPT, the Stockfish authors, and the Pullfish development community (see AUTHORS file)";
 }
 
 
