@@ -56,9 +56,9 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
         misc.cpp movegen.cpp movepick.cpp position.cpp zobrist.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/network.cpp \
-        engine.cpp score.cpp memory.cpp \
+        engine.cpp score.cpp memory.cpp learn/learn.cpp \
         book/book.cpp book/book_manager.cpp book/file_mapping.cpp \
-        book/polyglot/polyglot.cpp book/ctg/ctg.cpp
+        book/polyglot/polyglot.cpp book/ctg/ctg.cpp wdl/win_probability.cpp
 
 HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
                 nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/layers/affine_transform.h \
@@ -67,12 +67,12 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
                 nnue/nnue_common.h nnue/nnue_feature_transformer.h position.h zobrist.h \
                 search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
                 tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h \
-                book/book.h book/book_manager.h book/file_mapping.h \
-                book/polyglot/polyglot.h book/ctg/ctg.h
+                book/book.h book/book_manager.h book/file_mapping.h learn/learn.h \
+                book/polyglot/polyglot.h book/ctg/ctg.h wdl/win_probability.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
+VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg:learn:wdl
 
 ### ==========================================================================
 ### Section 2. High-level Configuration

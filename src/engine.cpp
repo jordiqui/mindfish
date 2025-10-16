@@ -24,6 +24,7 @@
 #include <iosfwd>
 #include <memory>
 #include <ostream>
+#include <random>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -41,6 +42,8 @@
 #include "types.h"
 #include "uci.h"
 #include "ucioption.h"
+#include "learn/learn.h"
+#include "wdl/win_probability.h"
 
 namespace Stockfish {
 
@@ -144,6 +147,27 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
+    options.add("Read only learning", Option(false, [](const Option& o) {
+                    LD.set_readonly(o);
+                    return std::nullopt;
+                }));
+
+    options.add("Self Q-learning", Option(false, [this](const Option& o) {
+                    LD.set_learning_mode(get_options(), int(o) ? "Self" : "Standard");
+                    return std::nullopt;
+                }));
+
+    options.add("Experience Book", Option(false, [this](const Option&) {
+                    LD.init(get_options());
+                    return std::nullopt;
+                }));
+
+    options.add("Experience Book Max Moves", Option(100, 1, 100));
+
+    options.add("Experience Book Min Depth", Option(4, 1, 255));
+
+    options.add("Concurrent Experience", Option(false));
+
     options.add(
       "CTG/BIN Book 1 File",
       Option("", [this](const Option&) {
@@ -186,6 +210,45 @@ void Engine::go(Search::LimitsType& limits) {
         && limits.depth == 0)
     {
         auto bookMove = bookManager.probe(pos, options);
+
+        if (bookMove == Move::none() && int(options["Experience Book"])
+            && pos.game_ply() / 2 < int(options["Experience Book Max Moves"]))
+        {
+            Depth minDepth = Depth(int(options["Experience Book Min Depth"]));
+            auto  learningMoves = LD.probe(pos.key());
+
+            if (!learningMoves.empty())
+            {
+                LD.sortLearningMoves(learningMoves);
+
+                Depth bestDepth = learningMoves.front()->depth;
+                if (bestDepth >= minDepth)
+                {
+                    int   bestPerformance = learningMoves.front()->performance;
+                    Value bestScore       = learningMoves.front()->score;
+
+                    if (bestPerformance >= 50)
+                    {
+                        std::vector<LearningMove*> candidates;
+                        for (auto* move : learningMoves)
+                        {
+                            if (move->depth == bestDepth && move->performance == bestPerformance
+                                && move->score == bestScore)
+                                candidates.push_back(move);
+                            else
+                                break;
+                        }
+
+                        if (!candidates.empty())
+                        {
+                            std::mt19937                    gen(std::random_device{}());
+                            std::uniform_int_distribution<> dist(0, int(candidates.size()) - 1);
+                            bookMove = candidates[static_cast<std::size_t>(dist(gen))]->move;
+                        }
+                    }
+                }
+            }
+        }
 
         if (bookMove != Move::none())
         {
@@ -260,6 +323,18 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
 
         if (m == Move::none())
             break;
+
+        if (LD.is_enabled() && LD.learning_mode() != LearningMode::Self && !LD.is_paused())
+        {
+            PersistedLearningMove plm;
+            plm.key                      = pos.key();
+            plm.learningMove.depth       = 0;
+            plm.learningMove.move        = m;
+            plm.learningMove.score       = VALUE_NONE;
+            plm.learningMove.performance = WDLModel::get_win_probability(Value(0), pos);
+
+            LD.add_new_learning(plm.key, plm.learningMove);
+        }
 
         states->emplace_back();
         pos.do_move(m, states->back());

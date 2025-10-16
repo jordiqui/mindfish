@@ -21,9 +21,11 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
 #include "types.h"
 #include "uci.h"
-#include "tune.h"
+#include "wdl/win_probability.h"
+#include "learn/learn.h"
 
 using namespace Stockfish;
 
@@ -31,11 +33,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << engine_info() << std::endl;
 
+    WDLModel::init();
+
     Bitboards::init();
     Position::init();
 
     UCIEngine uci(argc, argv);
 
+    LD.init(uci.engine_options());
     Tune::init(uci.engine_options());
 
     uci.loop();
