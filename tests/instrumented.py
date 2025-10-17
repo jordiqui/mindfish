@@ -164,6 +164,13 @@ class TestCLI(metaclass=OrderedClassMembers):
         self.pullfish = Pullfish("uci".split(" "), True)
         assert self.pullfish.process.returncode == 0
 
+    def test_uci_includes_multipv_info(self):
+        self.pullfish = Pullfish(["uci"], True)
+        assert (
+            "info string MultiPV: Sets the number of alternate lines of analysis to display, with a value of 1 showing only the best line."
+            in self.pullfish.process.stdout
+        )
+
     def test_export_net_verify_nnue(self):
         current_path = os.path.abspath(os.getcwd())
         self.pullfish = Pullfish(
