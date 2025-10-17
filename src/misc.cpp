@@ -42,9 +42,8 @@ namespace {
 // Version number or dev.
 // Keep this in sync with the README and build scripts so every artifact reports
 // the same Pullfish 1.0 171025 release branding.
-constexpr std::string_view engine_name       = "Pullfish 1.0 171025";
-constexpr std::string_view version           = "release";
-constexpr std::string_view upstream_version  = "Stockfish 17.1";
+constexpr std::string_view engine_name = "Pullfish 1.0 171025";
+constexpr std::string_view version     = "release";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -158,8 +157,6 @@ std::string engine_version_info() {
         ss << "nogit";
 #endif
     }
-
-    ss << " (based on " << upstream_version << ')';
 
     return ss.str();
 }
