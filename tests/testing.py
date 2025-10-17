@@ -1,5 +1,5 @@
 import subprocess
-from typing import List
+from typing import List, Optional
 import os
 import collections
 import time
@@ -61,7 +61,10 @@ race:Stockfish::TranspositionTable::hashfull
     @staticmethod
     def unset_tsan_option():
         os.environ.pop("TSAN_OPTIONS", None)
-        os.remove(f"tsan.supp")
+        try:
+            os.remove("tsan.supp")
+        except FileNotFoundError:
+            pass
 
 
 class EPD:
@@ -265,11 +268,19 @@ class MiniTestFramework:
 
     def __print_summary(self, duration: float):
         print(f"\n{WHITE_BOLD}Test Summary{RESET_COLOR}\n")
+        total_suites = self.passed_test_suites + self.failed_test_suites
         print(
-            f"    Test Suites: {GREEN_COLOR}{self.passed_test_suites} passed{RESET_COLOR}, {RED_COLOR}{self.failed_test_suites} failed{RESET_COLOR}, {self.passed_test_suites + self.failed_test_suites} total"
+            (
+                f"    Test Suites: {GREEN_COLOR}{self.passed_test_suites} passed{RESET_COLOR}, "
+                f"{RED_COLOR}{self.failed_test_suites} failed{RESET_COLOR}, {total_suites} total"
+            )
         )
+        total_tests = self.passed_tests + self.failed_tests
         print(
-            f"    Tests:       {GREEN_COLOR}{self.passed_tests} passed{RESET_COLOR}, {RED_COLOR}{self.failed_tests} failed{RESET_COLOR}, {self.passed_tests + self.failed_tests} total"
+            (
+                f"    Tests:       {GREEN_COLOR}{self.passed_tests} passed{RESET_COLOR}, "
+                f"{RED_COLOR}{self.failed_tests} failed{RESET_COLOR}, {total_tests} total"
+            )
         )
         print(f"    Time:        {duration}s\n")
 
@@ -285,12 +296,12 @@ class Pullfish:
         self,
         prefix: List[str],
         path: str,
-        args: List[str] = [],
+        args: Optional[List[str]] = None,
         cli: bool = False,
     ):
         self.path = path
         self.process = None
-        self.args = args
+        self.args = args or []
         self.cli = cli
         self.prefix = prefix
         self.output = []
