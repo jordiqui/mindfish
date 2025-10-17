@@ -145,6 +145,22 @@ bool Option::operator==(const char* s) const {
 bool Option::operator!=(const char* s) const { return !(*this == s); }
 
 
+Option Option::with_info(std::string description) const {
+    Option copy(*this);
+    copy.infoText = std::move(description);
+    return copy;
+}
+
+Option& Option::set_info(std::string description) {
+    infoText = std::move(description);
+    return *this;
+}
+
+const std::string& Option::info() const { return infoText; }
+
+bool Option::has_info() const { return !infoText.empty(); }
+
+
 // Updates currentValue and triggers on_change() action. It's up to
 // the GUI to check for option's limits, but we could receive the new value
 // from the user by console window, so let's check the bounds anyway.
@@ -209,5 +225,16 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
             }
 
     return os;
+}
+
+std::vector<std::pair<std::string, std::string>> OptionsMap::info_entries() const {
+    std::vector<std::pair<std::string, std::string>> entries;
+
+    for (size_t idx = 0; idx < options_map.size(); ++idx)
+        for (const auto& it : options_map)
+            if (it.second.idx == idx && it.second.has_info())
+                entries.emplace_back(it.first, it.second.info());
+
+    return entries;
 }
 }

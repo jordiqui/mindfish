@@ -101,7 +101,10 @@ Engine::Engine(std::optional<std::string> path) :
       "Ponder", Option(false));
 
     options.add(  //
-      "MultiPV", Option(1, 1, MAX_MOVES));
+      "MultiPV",
+      Option(1, 1, MAX_MOVES)
+        .with_info(
+          "Sets the number of alternate lines of analysis to display, with a value of 1 showing only the best line."));
 
     options.add("Skill Level", Option(20, 0, 20));
 

@@ -25,6 +25,8 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Stockfish {
 // Define a custom comparator, because the UCI options should be case-insensitive
@@ -52,6 +54,11 @@ class Option {
     bool operator==(const char*) const;
     bool operator!=(const char*) const;
 
+    Option  with_info(std::string) const;
+    Option& set_info(std::string);
+    const std::string& info() const;
+    bool               has_info() const;
+
     friend std::ostream& operator<<(std::ostream&, const OptionsMap&);
 
     int operator<<(const Option&) = delete;
@@ -63,6 +70,7 @@ class Option {
 
 
     std::string       defaultValue, currentValue, type;
+    std::string       infoText;
     int               min, max;
     size_t            idx;
     OnChange          on_change;
@@ -88,6 +96,8 @@ class OptionsMap {
     void add(const std::string&, const Option& option);
 
     std::size_t count(const std::string&) const;
+
+    std::vector<std::pair<std::string, std::string>> info_entries() const;
 
    private:
     friend class Engine;
