@@ -133,13 +133,15 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
+            const auto optionInfos = engine.get_options().info_entries();
+
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
 
-            for (const auto& [name, description] : engine.get_options().info_entries())
-                print_info_string(std::string(name).append(": ").append(description));
-
             sync_cout << "uciok" << sync_endl;
+
+            for (const auto& [name, description] : optionInfos)
+                print_info_string(std::string(name).append(": ").append(description));
         }
 
         else if (token == "setoption")
