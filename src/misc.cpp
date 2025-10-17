@@ -40,6 +40,8 @@ namespace Stockfish {
 namespace {
 
 // Version number or dev.
+// Keep this in sync with the README and build scripts so every artifact reports
+// the same Pullfish 1.0 171025 release branding.
 constexpr std::string_view engine_name = "Pullfish 1.0 171025";
 constexpr std::string_view version     = "release";
 

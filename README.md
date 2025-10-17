@@ -25,6 +25,12 @@
 > [AUTHORS](AUTHORS). This repository provides the complete source so the
 > community can collaborate on maintenance and future improvements.
 
+This release and all distributed binaries identify themselves as **Pullfish 1.0 171025**.
+You should see that exact name (including the build tag `171025`) in the engine
+headers, UCI responses, and compiled executable filenames. If a GUI shows a
+different string, make sure it is loading the binaries built from this version
+of the source tree.
+
 ## Overview
 
 Pullfish 1.0 171025 is a **free and strong UCI chess engine** that analyzes chess positions
