@@ -40,9 +40,8 @@ namespace Stockfish {
 namespace {
 
 // Version number or dev.
-constexpr std::string_view engine_name = "Pullfish";
-constexpr std::string_view version     = "17.1";
-constexpr std::string_view upstream_version = "Stockfish 17.1";
+constexpr std::string_view engine_name = "Pullfish 1.0 171025";
+constexpr std::string_view version     = "release";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -120,15 +119,14 @@ class Logger {
 // For local dev compiles we try to append the commit SHA and
 // commit date from git. If that fails only the local compilation
 // date is set and "nogit" is specified:
-//      Stockfish dev-YYYYMMDD-SHA
+//      Pullfish dev-YYYYMMDD-SHA
 //      or
-//      Stockfish dev-YYYYMMDD-nogit
+//      Pullfish dev-YYYYMMDD-nogit
 //
-// For releases (non-dev builds) we only include the version number:
-//      Stockfish version
+// For releases (non-dev builds) we use the fixed branded name.
 std::string engine_version_info() {
     std::stringstream ss;
-    ss << engine_name << ' ' << version << std::setfill('0');
+    ss << engine_name;
 
     if constexpr (version == "dev")
     {
@@ -155,14 +153,12 @@ std::string engine_version_info() {
 #endif
     }
 
-    ss << " (based on " << upstream_version << ')';
-
     return ss.str();
 }
 
 std::string engine_info(bool to_uci) {
     return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "Jorge Ruiz with credits to ChatGPT and the Stockfish developers (see AUTHORS file)";
+         + "Jorge Ruiz with credits to ChatGPT, the Stockfish authors, and the Pullfish development community (see AUTHORS file)";
 }
 
 

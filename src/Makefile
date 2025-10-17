@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-        EXE = pullfish.exe
+        EXE = pullfish-1.0-171025.exe
 else
-        EXE = pullfish
+        EXE = pullfish-1.0-171025
 endif
 
 ### Installation dir definitions
