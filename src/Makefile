@@ -38,10 +38,12 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
+RELEASE_BIN = pullfish-1.0-171025
+
 ifeq ($(target_windows),yes)
-        EXE = pullfish-1.0.exe
+        EXE = $(RELEASE_BIN).exe
 else
-        EXE = pullfish-1.0
+        EXE = $(RELEASE_BIN)
 endif
 
 ### Installation dir definitions
