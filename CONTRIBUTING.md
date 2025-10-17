@@ -2,7 +2,7 @@
 
 Welcome to the Pullfish project! We are excited that you are interested in
 contributing. This document outlines the guidelines and steps to follow when
-making contributions to Pullfish, a derivative of Stockfish 17.1.
+making contributions to Pullfish 1.0 171025, a derivative of Stockfish 17.1.
 
 ## Table of Contents
 
