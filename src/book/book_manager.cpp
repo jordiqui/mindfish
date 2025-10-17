@@ -27,8 +27,9 @@ std::string unquote(std::string value) {
 
 bool equals_ignore_case(std::string_view lhs, std::string_view rhs) {
     return lhs.size() == rhs.size()
-           && std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](unsigned char a, unsigned char b) {
-                  return std::tolower(a) == std::tolower(b);
+           && std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char a, char b) {
+                  return std::tolower(static_cast<unsigned char>(a))
+                      == std::tolower(static_cast<unsigned char>(b));
               });
 }
 

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -288,10 +289,10 @@ namespace Stockfish
                     if (p == ' ')
                         continue;
 
-                    if (p == toupper(p))
-                        p = tolower(p);
+                    if (p == std::toupper(static_cast<unsigned char>(p)))
+                        p = static_cast<char>(std::tolower(static_cast<unsigned char>(p)));
                     else
-                        p = toupper(p);
+                        p = static_cast<char>(std::toupper(static_cast<unsigned char>(p)));
                 }
             }
         }
