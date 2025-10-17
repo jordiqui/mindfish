@@ -40,9 +40,11 @@ namespace Stockfish {
 namespace {
 
 // Version number or dev.
-constexpr std::string_view engine_name = "Pullfish 1.0";
-constexpr std::string_view version     = "171025";
-constexpr std::string_view upstream_version = "Stockfish 17.1";
+// Keep this in sync with the README and build scripts so every artifact reports
+// the same Pullfish 1.0 171025 release branding.
+constexpr std::string_view engine_name       = "Pullfish 1.0 171025";
+constexpr std::string_view version           = "release";
+constexpr std::string_view upstream_version  = "Stockfish 17.1";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -120,15 +122,17 @@ class Logger {
 // For local dev compiles we try to append the commit SHA and
 // commit date from git. If that fails only the local compilation
 // date is set and "nogit" is specified:
-//      Stockfish dev-YYYYMMDD-SHA
+//      Pullfish dev-YYYYMMDD-SHA
 //      or
-//      Stockfish dev-YYYYMMDD-nogit
+//      Pullfish dev-YYYYMMDD-nogit
 //
-// For releases (non-dev builds) we only include the version number:
-//      Stockfish version
+// For releases (non-dev builds) we use the fixed branded name.
 std::string engine_version_info() {
     std::stringstream ss;
-    ss << engine_name << ' ' << version << std::setfill('0');
+    ss << engine_name;
+
+    if constexpr (version != "dev" && version != "release")
+        ss << ' ' << version;
 
     if constexpr (version == "dev")
     {
