@@ -36,6 +36,52 @@ paired with third-party front-ends such as Fritz 20 or Cutechess. It implements
 the Universal Chess Interface (UCI) protocol so those GUIs can discover it as
 **Pullfish 1.0 171025** in their engine lists.
 
+### BrainLearn experience integration
+
+Pullfish bundles the BrainLearn learning hash so it shares the same UCI options
+as BrainFish while persisting the data to `experience.exp`. Each entry in the
+file stores the following information (mirroring the in-memory BrainLearn
+transposition table):
+
+* best move in UCI format
+* board signature (hash key)
+* best move depth
+* best move score
+* best move performance, derived from the BrainLearn WDL model unless a custom
+  trainer provides its own value
+
+The engine loads `experience.exp` during startup, automatically merging any
+additional files that follow the `<fileType><qualityIndex>.exp` convention (for
+example `experience0.exp`, `experience1.exp`, …) and then deleting the merged
+files. Previous `.bin` learning files can be reused by simply renaming the
+extension to `.exp`.
+
+Learning is enabled whenever a new game begins or the position on the board has
+eight pieces or fewer. The hash table is updated when a new best score at depth
+≥ 4 plies is found according to the BrainLearn aspiration window. Because the
+data is written on `quit` or `stop`, engines that make heavy use of the feature
+should allow extra time for disk access.
+
+The following controls are available:
+
+* `Read only learning` – open the experience file without persisting changes.
+* `Self Q-learning` – enables the Q-learning update policy for self-play.
+* `Experience Book` – treats the experience file as a move book, prioritising
+  win probability, internal score, and depth (the `showexp` token displays the
+  stored moves for the current position).
+* `Experience Book Max Moves` – limits the number of book candidates (default
+  100).
+* `Experience Book Min Depth` – minimum search depth required for book use
+  (default 4).
+* `Concurrent Experience` – keeps per-instance experience files to avoid write
+  conflicts.
+* `quickresetexp` – recalculates the performance metric for every stored entry
+  using the latest BrainLearn WDL model.
+
+When performance needs to be realigned, send the `uci` token `quickresetexp` to
+the engine. The command reloads `experience.exp`, recomputes the performance for
+each move, and persists the updated values so they are used in future sessions.
+
 ## Files
 
 This distribution of Pullfish 1.0 consists of the following files:
