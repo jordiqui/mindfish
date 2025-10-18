@@ -28,6 +28,7 @@
 #include <mutex>
 #include <vector>
 
+#include "memory.h"
 #include "numa.h"
 #include "position.h"
 #include "search.h"
@@ -65,6 +66,13 @@ class OptionalThreadToNumaNodeBinder {
     NumaIndex         numaId;
 };
 
+struct WorkerDeleter {
+    void operator()(Search::Worker* ptr) const;
+    bool useLargePages = false;
+};
+
+using WorkerPtr = std::unique_ptr<Search::Worker, WorkerDeleter>;
+
 // Abstraction of a thread. It contains a pointer to the worker and a native thread.
 // After construction, the native thread is started with idle_loop()
 // waiting for a signal to start searching.
@@ -93,8 +101,8 @@ class Thread {
     void   wait_for_search_finished();
     size_t id() const { return idx; }
 
-    std::unique_ptr<Search::Worker> worker;
-    std::function<void()>           jobFunc;
+    WorkerPtr               worker;
+    std::function<void()>   jobFunc;
 
    private:
     std::mutex                mutex;
