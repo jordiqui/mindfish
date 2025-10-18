@@ -60,7 +60,10 @@ Thread::Thread(Search::SharedState&                    sharedState,
 
     wait_for_search_finished();
 
-    run_custom_job([this, &binder, &sharedState, sm = std::move(sm), n]() mutable {
+    Search::ISearchManager* smRaw = sm.release();
+
+    run_custom_job([this, &binder, &sharedState, smRaw, n]() {
+        std::unique_ptr<Search::ISearchManager> localManager(smRaw);
         // Use the binder to [maybe] bind the threads to a NUMA node before doing
         // the Worker allocation. Ideally we would also allocate the SearchManager
         // here, but that's minor.
@@ -71,24 +74,16 @@ Thread::Thread(Search::SharedState&                    sharedState,
         {
             if (void* raw = aligned_large_pages_alloc(sizeof(Search::Worker)))
             {
-                try
-                {
-                    auto* ptr = new (raw)
-                      Search::Worker(sharedState, std::move(sm), n, this->numaAccessToken);
-                    this->worker.reset(ptr);
-                    useLargePages = true;
-                }
-                catch (...)
-                {
-                    aligned_large_pages_free(raw);
-                    throw;
-                }
+                auto* ptr = new (raw)
+                  Search::Worker(sharedState, std::move(localManager), n, this->numaAccessToken);
+                this->worker.reset(ptr);
+                useLargePages = true;
             }
         }
 
         if (!this->worker)
             this->worker.reset(
-              new Search::Worker(sharedState, std::move(sm), n, this->numaAccessToken));
+              new Search::Worker(sharedState, std::move(localManager), n, this->numaAccessToken));
 
         this->worker.get_deleter().useLargePages = useLargePages;
     });
