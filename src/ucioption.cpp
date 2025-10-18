@@ -54,8 +54,19 @@ void OptionsMap::setoption(std::istringstream& is) {
     while (is >> token)
         value += (value.empty() ? "" : " ") + token;
 
+    auto equals_ic = [](const std::string& lhs, const std::string& rhs) {
+        return !CaseInsensitiveLess()(lhs, rhs) && !CaseInsensitiveLess()(rhs, lhs);
+    };
+
     if (options_map.count(name))
+    {
         options_map[name] = value;
+
+        if (equals_ic(name, "MultiPV") && options_map.count("Analysis Lines"))
+            options_map["Analysis Lines"] = value;
+        else if (equals_ic(name, "Analysis Lines") && options_map.count("MultiPV"))
+            options_map["MultiPV"] = value;
+    }
     else
         sync_cout << "No such option: " << name << sync_endl;
 }

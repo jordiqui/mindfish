@@ -26,6 +26,7 @@
 #include <ostream>
 #include <random>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -100,11 +101,20 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "Ponder", Option(false));
 
+    constexpr auto MultiPVDescription =
+      "Sets the number of alternate lines of analysis to display, with a value of 1 showing only the best line.";
+
     options.add(  //
       "MultiPV",
       Option(1, 1, MAX_MOVES)
+        .with_info(MultiPVDescription));
+
+    options.add(  //
+      "Analysis Lines",
+      Option(1, 1, MAX_MOVES)
         .with_info(
-          "Sets the number of alternate lines of analysis to display, with a value of 1 showing only the best line."));
+          std::string(MultiPVDescription)
+            + " This alias ensures compatibility with GUIs that expose the control under a different name."));
 
     options.add("Skill Level", Option(20, 0, 20));
 
