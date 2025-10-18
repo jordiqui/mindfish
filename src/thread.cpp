@@ -22,6 +22,7 @@
 #include <cassert>
 #include <deque>
 #include <memory>
+#include <new>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -36,25 +37,60 @@
 
 namespace Stockfish {
 
+void WorkerDeleter::operator()(Search::Worker* ptr) const {
+    if (!ptr)
+        return;
+
+    if (useLargePages)
+        memory_deleter<Search::Worker>(ptr, aligned_large_pages_free);
+    else
+        delete ptr;
+}
+
 // Constructor launches the thread and waits until it goes to sleep
 // in idle_loop(). Note that 'searching' and 'exit' should be already set.
 Thread::Thread(Search::SharedState&                    sharedState,
                std::unique_ptr<Search::ISearchManager> sm,
                size_t                                  n,
                OptionalThreadToNumaNodeBinder          binder) :
+    worker(nullptr, WorkerDeleter{}),
     idx(n),
     nthreads(sharedState.options["Threads"]),
     stdThread(&Thread::idle_loop, this) {
 
     wait_for_search_finished();
 
-    run_custom_job([this, &binder, &sharedState, &sm, n]() {
+    run_custom_job([this, &binder, &sharedState, sm = std::move(sm), n]() mutable {
         // Use the binder to [maybe] bind the threads to a NUMA node before doing
         // the Worker allocation. Ideally we would also allocate the SearchManager
         // here, but that's minor.
         this->numaAccessToken = binder();
-        this->worker =
-          std::make_unique<Search::Worker>(sharedState, std::move(sm), n, this->numaAccessToken);
+        bool useLargePages    = false;
+
+        if (has_large_pages())
+        {
+            if (void* raw = aligned_large_pages_alloc(sizeof(Search::Worker)))
+            {
+                try
+                {
+                    auto* ptr = new (raw)
+                      Search::Worker(sharedState, std::move(sm), n, this->numaAccessToken);
+                    this->worker.reset(ptr);
+                    useLargePages = true;
+                }
+                catch (...)
+                {
+                    aligned_large_pages_free(raw);
+                    throw;
+                }
+            }
+        }
+
+        if (!this->worker)
+            this->worker.reset(
+              new Search::Worker(sharedState, std::move(sm), n, this->numaAccessToken));
+
+        this->worker.get_deleter().useLargePages = useLargePages;
     });
 
     wait_for_search_finished();
