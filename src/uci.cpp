@@ -46,6 +46,15 @@ namespace Stockfish {
 
 constexpr auto BenchmarkCommand = "speedtest";
 
+constexpr std::string_view PullfishLogo =
+  R"(██████╗ ██╗   ██╗██╗     ██╗     ███████╗██╗███████╗██╗  ██╗
+██╔══██╗██║   ██║██║     ██║     ██╔════╝██║██╔════╝██║ ██╔╝
+██████╔╝██║   ██║██║     ██║     █████╗  ██║█████╗  █████╔╝ 
+██╔══██╗██║   ██║██║     ██║     ██╔══╝  ██║██╔══╝  ██╔═██╗ 
+██████╔╝╚██████╔╝███████╗███████╗███████╗██║███████╗██║  ██╗
+╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝
+)";
+
 constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 template<typename... Ts>
 struct overload: Ts... {
@@ -135,6 +144,7 @@ void UCIEngine::loop() {
         {
             const auto optionInfos = engine.get_options().info_entries();
 
+            sync_cout << PullfishLogo << '\n';
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
 
