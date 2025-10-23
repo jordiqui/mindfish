@@ -19,6 +19,7 @@
 #include "memory.h"
 
 #include <cstdlib>
+#include <limits>
 
 #if __has_include("features.h")
     #include <features.h>
@@ -70,19 +71,48 @@ namespace Stockfish {
 // availability of aligned_alloc(). Memory allocated with std_aligned_alloc()
 // must be freed with std_aligned_free().
 
+namespace {
+
+size_t adjust_size_for_alignment(size_t alignment, size_t size, bool& overflowed) {
+    overflowed = false;
+
+    if (!alignment)
+        return size;
+
+    const size_t remainder = size % alignment;
+    if (!remainder)
+        return size;
+
+    const size_t increment = alignment - remainder;
+    if (increment > std::numeric_limits<size_t>::max() - size)
+    {
+        overflowed = true;
+        return 0;
+    }
+
+    return size + increment;
+}
+
+}  // namespace
+
 void* std_aligned_alloc(size_t alignment, size_t size) {
+    bool   overflowed   = false;
+    size_t adjustedSize = adjust_size_for_alignment(alignment, size, overflowed);
+    if (overflowed)
+        return nullptr;
+
 #if defined(_ISOC11_SOURCE)
-    return aligned_alloc(alignment, size);
+    return aligned_alloc(alignment, adjustedSize);
 #elif defined(POSIXALIGNEDALLOC)
     void* mem = nullptr;
-    posix_memalign(&mem, alignment, size);
+    posix_memalign(&mem, alignment, adjustedSize);
     return mem;
 #elif defined(_WIN32) && !defined(_M_ARM) && !defined(_M_ARM64)
-    return _mm_malloc(size, alignment);
+    return _mm_malloc(adjustedSize, alignment);
 #elif defined(_WIN32)
-    return _aligned_malloc(size, alignment);
+    return _aligned_malloc(adjustedSize, alignment);
 #else
-    return std::aligned_alloc(alignment, size);
+    return std::aligned_alloc(alignment, adjustedSize);
 #endif
 }
 
