@@ -22,10 +22,12 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <iterator>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -46,14 +48,71 @@ namespace Stockfish {
 
 constexpr auto BenchmarkCommand = "speedtest";
 
-constexpr std::string_view PullfishLogo =
+namespace {
+
+constexpr std::string_view PullfishLogoUtf8 =
   R"(██████╗ ██╗   ██╗██╗     ██╗     ███████╗██╗███████╗██╗  ██╗
 ██╔══██╗██║   ██║██║     ██║     ██╔════╝██║██╔════╝██║ ██╔╝
-██████╔╝██║   ██║██║     ██║     █████╗  ██║█████╗  █████╔╝ 
-██╔══██╗██║   ██║██║     ██║     ██╔══╝  ██║██╔══╝  ██╔═██╗ 
+██████╔╝██║   ██║██║     ██║     █████╗  ██║█████╗  █████╔╝
+██╔══██╗██║   ██║██║     ██║     ██╔══╝  ██║██╔══╝  ██╔═██╗
 ██████╔╝╚██████╔╝███████╗███████╗███████╗██║███████╗██║  ██╗
 ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝
 )";
+
+constexpr std::string_view PullfishLogoAscii =
+  R"( ____        _ _ _     _     _
+|  _ \ _   _| | (_)___| |__ (_)_ __   ___
+| |_) | | | | | | / __| '_ \| | '_ \ / _ \
+|  __/| |_| | | | \__ \ | | | | | | |  __/
+|_|    \__,_|_|_|_|___/_| |_|_|_| |_|\___|
+)";
+
+std::string to_lower_ascii(std::string_view input) {
+    std::string lowered(input);
+
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    return lowered;
+}
+
+bool has_utf8_hint(std::string_view value) {
+    const auto lowered = to_lower_ascii(value);
+    return lowered.find("utf-8") != std::string::npos || lowered.find("utf8") != std::string::npos;
+}
+
+std::string_view select_logo_from_environment() {
+    if (const char* style_env = std::getenv("PULLFISH_LOGO_STYLE"))
+    {
+        const auto style = to_lower_ascii(style_env);
+
+        if (style == "none" || style == "off" || style == "disable" || style == "disabled")
+            return std::string_view();
+
+        if (style == "ascii" || style == "plain")
+            return PullfishLogoAscii;
+
+        if (style == "utf8" || style == "utf-8" || style == "utf")
+            return PullfishLogoUtf8;
+    }
+
+#if defined(_WIN32)
+    // Windows consoles often default to non-UTF-8 code pages. Unless the user opts in
+    // through the environment variable above, prefer the ASCII logo to avoid mojibake.
+    return PullfishLogoAscii;
+#else
+    constexpr const char* kLocaleVars[] = {"LC_ALL", "LC_CTYPE", "LANG"};
+
+    for (const char* var : kLocaleVars)
+        if (const char* value = std::getenv(var); value && has_utf8_hint(value))
+            return PullfishLogoUtf8;
+
+    return PullfishLogoAscii;
+#endif
+}
+
+}  // namespace
 
 constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 template<typename... Ts>
@@ -143,10 +202,13 @@ void UCIEngine::loop() {
         else if (token == "uci")
         {
             const auto optionInfos = engine.get_options().info_entries();
+            const auto logo        = select_logo_from_environment();
 
-            sync_cout << PullfishLogo << '\n';
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
+
+            if (!logo.empty())
+                print_info_string(logo);
 
             sync_cout << "uciok" << sync_endl;
 
