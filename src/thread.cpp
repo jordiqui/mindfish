@@ -37,23 +37,12 @@
 
 namespace Stockfish {
 
-void WorkerDeleter::operator()(Search::Worker* ptr) const {
-    if (!ptr)
-        return;
-
-    if (useLargePages)
-        memory_deleter<Search::Worker>(ptr, aligned_large_pages_free);
-    else
-        delete ptr;
-}
-
 // Constructor launches the thread and waits until it goes to sleep
 // in idle_loop(). Note that 'searching' and 'exit' should be already set.
 Thread::Thread(Search::SharedState&                    sharedState,
                std::unique_ptr<Search::ISearchManager> sm,
                size_t                                  n,
                OptionalThreadToNumaNodeBinder          binder) :
-    worker(nullptr, WorkerDeleter{}),
     idx(n),
     nthreads(sharedState.options["Threads"]),
     stdThread(&Thread::idle_loop, this) {
@@ -68,24 +57,8 @@ Thread::Thread(Search::SharedState&                    sharedState,
         // the Worker allocation. Ideally we would also allocate the SearchManager
         // here, but that's minor.
         this->numaAccessToken = binder();
-        bool useLargePages    = false;
-
-        if (has_large_pages())
-        {
-            if (void* raw = aligned_large_pages_alloc(sizeof(Search::Worker)))
-            {
-                auto* ptr = new (raw)
-                  Search::Worker(sharedState, std::move(localManager), n, this->numaAccessToken);
-                this->worker.reset(ptr);
-                useLargePages = true;
-            }
-        }
-
-        if (!this->worker)
-            this->worker.reset(
-              new Search::Worker(sharedState, std::move(localManager), n, this->numaAccessToken));
-
-        this->worker.get_deleter().useLargePages = useLargePages;
+        this->worker = make_unique_large_page<Search::Worker>(
+          sharedState, std::move(localManager), n, this->numaAccessToken);
     });
 
     wait_for_search_finished();
